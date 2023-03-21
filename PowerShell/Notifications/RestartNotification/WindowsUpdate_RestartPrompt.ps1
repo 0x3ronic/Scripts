@@ -24,23 +24,24 @@
 
     Some checks were left out such as NetLogon as this checks if a restart is required after joining a domain and similarly to other checks such as hostname changes that also require restarts. These are not required 
     to determine if a restart is required after Windows has updated. In addition, the PendingFileRenameOperations can cause false positives, so the pending reboot test uses the -and operator to check if any of the other keys exist too alongside it. 
+
     If only the PendingFileRenameOperations key exists or no keys exist at all, the script will end and output "Reboot not required. Exiting..." and exit the script and not prompt the user to restart. You can change this behaviour on line 321.
 
-    If a restart is required, the script will display a PowerShell Form in the bottom right of the primary screen giving end users a couple of options. They will be able to restart the computer immediately by pressing the 'Restart Now' button or they
-    can select one of either three different options to postpone the restart using the dropdown - 1 hour, 2 hours, and 3 hours. These options can be changed to your desire on lines 122 and 222.
+    If a restart is required, the script will display a PowerShell Form in the bottom right of the primary screen giving end users a couple of options. They will be able to restart the computer immediately by pressing the 'Restart Now' button or they can select one of either three different options to postpone the restart using the dropdown - 1 hour, 2 hours, and 3 hours. These options can be changed to your desire on lines 122 and 222.
 
-    To prevent the user from circumnavigating the prompt and cancelling the restart altogether, there are a few measures put in place to stop this. First, on line 265 this prevents the user from closing the form from the Alt + Tab window as well as from 
-    pressing Alt + F4 to quit the form. Secondly, the form border style is set so the minimise, maximise and exit buttons are gone. Thirdly, the form is locked on the screen and set to TopMost to ensure the user doesn't disregard the prompt and guarantee
-    a restart is done or scheduled. Lastly, in addition to the 'shutdown -r' command to restart the machine, a secondary hidden PowerShell window is spawned to execute the restart at the specified time. This is done to prevent the scheduled restart being
-    cancelled using the 'shutdown -a' command that a standard user can execute via cmd. 
+    To prevent the user from circumnavigating the prompt and cancelling the restart altogether, there are a few measures put in place to stop this. 
+    - First, on line 265 this prevents the user from closing the form from the Alt + Tab window as well as from pressing Alt + F4 to quit the form. 
+    - Secondly, the form border style is set so the minimise, maximise and exit buttons are removed. 
+    - Thirdly, the form is locked on the screen and set to TopMost to ensure the user doesn't disregard the prompt and guarantees a restart is done or scheduled. 
+    - Lastly, in addition to the 'shutdown -r' command to restart the machine, a secondary hidden PowerShell console window is spawned to execute the restart at the specified time. This is done to prevent the scheduled restart being cancelled using the 'shutdown -a' command that a standard user can execute via cmd. 
 
     Once a restart has been scheduled or executed, the form and script exits appropriately to ensure the reports you see in Atera show accurate results along with confirmation of the choice the user selected.
 
 .NOTES
     This script is intended to be used with an RMM or script deployment tool, and is ideal for running on a schedule after a patch window. 
 
-    WARNING! The script may need to be run as Current User and NOT with System privileges. Also ensure the script run time is set to at least 30 minutes and not before as the script has a countdown (default 1800 seconds)
-    to ensure the form closes with a successful exit code. 
+    WARNING! The script may need to be run as Current User and NOT with System privileges. Also ensure the script run time is set to at least 30 minutes and not before as the script has a hidden countdown (default 1800 seconds)
+    to ensure the form closes with a successful exit code if no input is given by the user. 
 #>
 
 
@@ -143,7 +144,6 @@ function RestartNotification_Form
         }
     }
      
-     
     $Form_StateCorrection_Load= 
     { 
         $MainForm.WindowState = $InitialFormWindowState 
@@ -178,6 +178,8 @@ function RestartNotification_Form
     $ddlDelay.SuspendLayout()
  
     $MainForm.Controls.AddRange(@($lblTitle,$lblMessage,$ddlDelay,$btnRestartNow,$btnPostpone))
+
+    # Form styling
 
     $monitor = [System.Windows.Forms.Screen]::PrimaryScreen 
     [void]::$monitor.WorkingArea.Width
@@ -276,7 +278,7 @@ function RestartNotification_Form
     return $MainForm.ShowDialog() 
 }
 
-#  Restart required check 
+#  Confirms if a restart is required by checking the following registry keys. To avoid false positives the $RebootRequired variable only confirms a reboot is required if the pending filerename operations returns true along with any of the other keys
 function CheckRestartRequired {
     try {
         # Check for Component Based Servicing 'Reboot Pending' Reg Key
@@ -339,14 +341,14 @@ function CheckRestartRequired {
     }
 } 
 
-# Function to determine if a restart is required, if not it exits. If it does, the form is executed. 
+# First function to determine if a restart is required, if not it exits. If it does, the form is executed. 
 function Check {
     if ((CheckRestartRequired).RebootRequired -eq 'Yes') {
-        RestartNotification_Form
+        RestartNotification_Form # Executes the form that displays the prompt to the user
     }
         else {
             Write-Host "Reboot not required. Exiting..."
-            Exit 0
+            Exit 0 # If a restart is not required, it exits successfully for better reporting. 
         }
 
 }
